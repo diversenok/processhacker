@@ -252,12 +252,12 @@ typedef union _AFD_ADDRESS
     {
         //
         // TDI_ADDRESS_INFO includes an embedded socket address that starts at AddressType (which corresponds to sa_family).
-        // 
-        // ---------------- | ------------------------- | 
+        //
+        // ---------------- | ------------------------- |
         //                  | ULONG ActivityCount       |
         //                  | ------------------------- | --------------------- |
         //                  |                           | ULONG TAAddressCount  |
-        //                  |                           | --------------------- | ---------------------------- | 
+        //                  |                           | --------------------- | ---------------------------- |
         //                  |                           |                       | USHORT AddressLength         |
         // TDI_ADDRESS_INFO | TRANSPORT_ADDRESS Address |                       | ---------------------------- | ---------- | ---------------- |
         //                  |                           | TA_ADDRESS Address[1] | USHORT AddressType           |            | USHORT sa_family |
@@ -505,7 +505,7 @@ typedef struct _SIO_DELIVERY_STATUS
     ULONG PendedReceiveRequests;
 } SIO_DELIVERY_STATUS, *PSIO_DELIVERY_STATUS;
 
-// private + rev
+// private
 typedef struct _AFD_INFORMATION
 {
     ULONG InformationType;
@@ -514,8 +514,8 @@ typedef struct _AFD_INFORMATION
         BOOLEAN Boolean;
         ULONG Ulong;
         LARGE_INTEGER LargeInteger;
-        AFD_GROUP_INFO GroupInfo;
-        SIO_DELIVERY_STATUS DeliveryStatus;
+        AFD_GROUP_INFO GroupInfo; // rev
+        SIO_DELIVERY_STATUS DeliveryStatus; // rev
     } Information;
 } AFD_INFORMATION, *PAFD_INFORMATION;
 
@@ -540,8 +540,8 @@ typedef struct _SOCK_SHARED_INFO
     LONG LocalAddressLength;
     LONG RemoteAddressLength;
     LINGER LingerInfo;
-    ULONG SendTimeout;
-    ULONG ReceiveTimeout;
+    ULONG SendTimeout; // in milliseconds
+    ULONG ReceiveTimeout; // in milliseconds
     ULONG ReceiveBufferSize;
     ULONG SendBufferSize;
     union
