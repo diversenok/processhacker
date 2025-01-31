@@ -1101,7 +1101,7 @@ NTSTATUS PhpGetBestObjectName(
     else if (PhEqualString2(TypeName, L"File", TRUE))
     {
         // Use the socket address for AFD handles
-        if (PhIsAfdSocketName(ObjectName))
+        if (PhAfdIsSocketObjectName(ObjectName))
         {
             HANDLE dupHandle;
 
@@ -1117,7 +1117,7 @@ NTSTATUS PhpGetBestObjectName(
 
             if (NT_SUCCESS(status))
             {
-                bestObjectName = PhAfdFormatSocketName(dupHandle);
+                bestObjectName = PhAfdFormatSocketBestName(dupHandle);
                 PhQueryCloseHandle(dupHandle);
             }
         }
