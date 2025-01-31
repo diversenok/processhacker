@@ -10,6 +10,7 @@
  */
 
 #include <phafd.h>
+#include <hndlinfo.h>
 #include <ws2ipdef.h>
 #include <ws2bth.h>
 #include <hvsocket.h>
@@ -23,11 +24,11 @@
    */
 BOOLEAN
 NTAPI
-PhIsAfdSocketName(
-    _In_ PPH_STRING ObjectName
+PhAfdIsSocketObjectName(
+    _In_opt_ PPH_STRING ObjectName
     )
 {
-    return PhStartsWithString2(ObjectName, AFD_DEVICE_NAME, TRUE) &&
+    return ObjectName && PhStartsWithString2(ObjectName, AFD_DEVICE_NAME, TRUE) &&
         (ObjectName->Length == sizeof(AFD_DEVICE_NAME) - sizeof(UNICODE_NULL) ||
          ObjectName->Buffer[ObjectName->Length / sizeof(WCHAR)] == OBJ_NAME_PATH_SEPARATOR);
 }
@@ -41,7 +42,7 @@ PhIsAfdSocketName(
   */
 NTSTATUS
 NTAPI
-PhIsAfdSocketHandle(
+PhAfdIsSocketHandle(
     _In_ HANDLE Handle
     )
 {
@@ -81,7 +82,7 @@ PhIsAfdSocketHandle(
 }
 
  /**
-  * \brief Issues an IOCTL on an AFD handle.
+  * \brief Issues an IOCTL on an AFD handle and waits for its completion.
   *
   * \param[in] SocketHandle An AFD socket handle.
   * \param[in] IoControlCode I/O control code
@@ -212,7 +213,7 @@ PhAfdQuerySharedInfo(
     if (!NT_SUCCESS(status))
         return status;
 
-    // Shared information is provided on the Win32 level, so do a sanity check on the returned size
+    // SShared information is provided by the Win32 level; do a sanity check on the returned size
     return returnedSize < sizeof(SOCK_SHARED_INFO) ? STATUS_NOT_FOUND : status;
 }
 
@@ -238,13 +239,104 @@ PhAfdQuerySimpleInfo(
     return PhAfdDeviceIoControl(
         SocketHandle,
         IOCTL_AFD_GET_INFORMATION,
-        &Information,
+        Information,
         sizeof(AFD_INFORMATION),
-        &Information,
+        Information,
         sizeof(AFD_INFORMATION),
         NULL,
         NULL
         );
+}
+
+/**
+  * \brief Opens an address or a connection handle to the underlying device for a TDI socket.
+  *
+  * \param[in] SocketHandle An AFD socket handle.
+  * \param[in] QueryMode A type of the query, either AFD_QUERY_ADDRESS_HANDLE or AFD_QUERY_CONNECTION_HANDLE.
+  * \param[out] TdiHandle A pointer to a variable that receives a TDI device handle, NULL (when no handle is available), or INVALID_HANDLE_VALUE (for non-TDI sockets).
+  *
+  * \return Successful or errant status.
+  */
+NTSTATUS
+NTAPI
+PhAfdQueryTdiHandle(
+    _In_ HANDLE SocketHandle,
+    _In_ ULONG QueryMode,
+    _Out_ PHANDLE TdiHandle
+    )
+{
+    NTSTATUS status;
+    AFD_HANDLE_INFO handles;
+
+    if (QueryMode != AFD_QUERY_ADDRESS_HANDLE && QueryMode != AFD_QUERY_CONNECTION_HANDLE)
+        return STATUS_INVALID_INFO_CLASS;
+
+    status = PhAfdDeviceIoControl(
+        SocketHandle,
+        IOCTL_AFD_QUERY_HANDLES,
+        &QueryMode,
+        sizeof(QueryMode),
+        &handles,
+        sizeof(handles),
+        NULL,
+        NULL
+        );
+
+    if (NT_SUCCESS(status))
+    {
+        if (QueryMode == AFD_QUERY_ADDRESS_HANDLE)
+            *TdiHandle = handles.TdiAddressHandle;
+        else
+            *TdiHandle = handles.TdiConnectionHandle;
+    }
+
+    return status;
+}
+
+/**
+  * \brief Formats a TDI device name for a socket.
+  *
+  * \param[in] SocketHandle An AFD socket handle.
+  * \param[in] QueryMode A type of the query, either AFD_QUERY_ADDRESS_HANDLE or AFD_QUERY_CONNECTION_HANDLE.
+  * \param[out] TdiDeviceName A pointer to a variable that receives a device name string.
+  *
+  * \return Successful or errant status.
+  */
+NTSTATUS
+NTAPI
+PhAfdQueryFormatTdiDeviceName(
+    _In_ HANDLE SocketHandle,
+    _In_ ULONG QueryMode,
+    _Outptr_ PPH_STRING *TdiDeviceName
+    )
+{
+    NTSTATUS status;
+    HANDLE hTdiDevice;
+
+    status = PhAfdQueryTdiHandle(
+        SocketHandle,
+        QueryMode,
+        &hTdiDevice
+        );
+
+    if (!NT_SUCCESS(status))
+        return status;
+
+    if (hTdiDevice == INVALID_HANDLE_VALUE)
+    {
+        *TdiDeviceName = PhCreateString(L"N/A");
+    }
+    else if (hTdiDevice == NULL)
+    {
+        *TdiDeviceName = PhCreateString(L"None");
+    }
+    else
+    {
+        status = PhGetObjectName(NtCurrentProcess(), hTdiDevice, TRUE, TdiDeviceName);
+        NtClose(hTdiDevice);
+    }
+
+    return status;
 }
 
 /**
@@ -258,17 +350,17 @@ BOOLEAN
 NTAPI
 PhpAfdIsSupportedAddressFamily(
     _In_ LONG AddressFamily
-)
+    )
 {
     switch (AddressFamily)
     {
-        case AF_INET:
-        case AF_INET6:
-        case AF_BTH:
-        case AF_HYPERV:
-            return TRUE;
-        default:
-            return FALSE;
+    case AF_INET:
+    case AF_INET6:
+    case AF_BTH:
+    case AF_HYPERV:
+        return TRUE;
+    default:
+        return FALSE;
     }
 }
 
@@ -290,7 +382,17 @@ PhAfdQueryAddress(
     )
 {
     NTSTATUS status;
-    AFD_ADDRESS buffer;
+    AFD_ADDRESS buffer = { 0 };
+
+    if (Remote)
+    {
+        // HACK: If the socket has a suitable state but no remote address, the IOCTL can succeed without
+        // writing anything to the buffer, yet setting IO_STATUS_BLOCK's Information to a non-zero value.
+        // We issue a zero-size query to recognize this scenario. (diversenok)
+
+        if (NT_SUCCESS(PhAfdDeviceIoControl(SocketHandle, IOCTL_AFD_GET_REMOTE_ADDRESS, NULL, 0, NULL, 0, NULL, NULL)))
+            return STATUS_NOT_FOUND;
+    }
 
     // Retrieve the address
     status = PhAfdDeviceIoControl(
@@ -323,6 +425,7 @@ PhAfdQueryAddress(
         RtlZeroMemory(Address, sizeof(SOCKADDR_STORAGE));
 
         // AddressLength covers the length after the AddressType field, while the socket address starts at the AddressType field.
+        // See comments in AFD_ADDRESS for details about the layout.
         RtlCopyMemory(
             Address,
             &buffer.TdiAddressUnpacked.EmbeddedAddress,
@@ -473,75 +576,374 @@ PhAfdQueryFormatAddress(
 }
 
 /**
-  * \brief Looks up a human-readable name of a known protocol.
+  * \brief Looks up a human-readable name of a known socket state.
+  *
+  * \param[in] SocketState The socket state value.
+  *
+  * \return A string with the state name or NULL when the state value is not recognized.
+  */
+_Maybenull_
+PCWSTR
+NTAPI
+PhpAfdGetSocketStateString(
+    _In_ SOCKET_STATE SocketState
+    )
+{
+    switch (SocketState)
+    {
+    case SocketStateInitializing:
+        return L"Initializing";
+    case SocketStateOpen:
+        return L"Open";
+    case SocketStateBound:
+        return L"Bound";
+    case SocketStateBoundSpecific:
+        return L"Bound (specific)";
+    case SocketStateConnected:
+        return L"Connected";
+    case SocketStateClosing:
+        return L"Closing";
+    default:
+        return NULL;
+    }
+}
+
+/**
+  * \brief Formats a socket state as a string.
+  *
+  * \param[in] SocketState The socket state value.
+  *
+  * \return A human-redable name of the socket state.
+  */
+PPH_STRING
+NTAPI
+PhAfdFormatSocketState(
+    _In_ SOCKET_STATE SocketState
+    )
+{
+    PCWSTR knownName = PhpAfdGetSocketStateString(SocketState);
+
+    if (knownName)
+        return PhCreateString(knownName);
+    else
+        return PhFormatString(L"Invalid state (%d)", SocketState);
+}
+
+/**
+  * \brief Looks up a human-readable name of a socket type.
+  *
+  * \param[in] SocketType The socket type value.
+  *
+  * \return A string with the socket type name or NULL when the value is not recognized.
+  */
+_Maybenull_
+PCWSTR
+NTAPI
+PhpAfdGetSocketTypeString(
+    _In_ LONG SocketType
+    )
+{
+    switch (SocketType)
+    {
+    case SOCK_STREAM:
+        return L"Stream";
+    case SOCK_DGRAM:
+        return L"Datagram";
+    case SOCK_RAW:
+        return L"Raw";
+    case SOCK_RDM:
+        return L"Reliably-delivered message";
+    case SOCK_SEQPACKET:
+        return L"Pseudo-stream";
+    default:
+        return NULL;
+    }
+}
+
+/**
+  * \brief Formats a socket type as a string.
+  *
+  * \param[in] SocketType The socket type value.
+  *
+  * \return A human-redable name for the socket type.
+  */
+PPH_STRING
+NTAPI
+PhAfdFormatSocketType(
+    _In_ LONG SocketType
+    )
+{
+    PCWSTR knownName = PhpAfdGetSocketTypeString(SocketType);
+
+    if (knownName)
+        return PhCreateString(knownName);
+    else
+        return PhFormatString(L"Unknown (%d)", SocketType);
+}
+
+/**
+  * \brief Formats up a human-readable name for a set of AFD socket flags.
+  *
+  * \param[in] SharedInfo The shared socket information buffer.
+  *
+  * \return A string with the flag names.
+  */
+PPH_STRING
+NTAPI
+PhAfdFormatSharedInfoFlags(
+    _In_ PSOCK_SHARED_INFO SharedInfo
+    )
+{
+    PH_STRING_BUILDER stringBuilder;
+
+    PhInitializeStringBuilder(&stringBuilder, 80);
+    PhAppendFormatStringBuilder(&stringBuilder, L"0x%04X (", SharedInfo->Flags);
+
+    if (SharedInfo->Listening)
+        PhAppendStringBuilder2(&stringBuilder, L"Listening, ");
+    if (SharedInfo->Broadcast)
+        PhAppendStringBuilder2(&stringBuilder, L"Broadcast, ");
+    if (SharedInfo->Debug)
+        PhAppendStringBuilder2(&stringBuilder, L"Debug, ");
+    if (SharedInfo->OobInline)
+        PhAppendStringBuilder2(&stringBuilder, L"OOB in line, ");
+    if (SharedInfo->ReuseAddresses)
+        PhAppendStringBuilder2(&stringBuilder, L"Reuse addresses, ");
+    if (SharedInfo->ExclusiveAddressUse)
+        PhAppendStringBuilder2(&stringBuilder, L"Exclusive address use, ");
+    if (SharedInfo->NonBlocking)
+        PhAppendStringBuilder2(&stringBuilder, L"Non-blocking, ");
+    if (SharedInfo->DontUseWildcard)
+        PhAppendStringBuilder2(&stringBuilder, L"Don't use wildcard, ");
+    if (SharedInfo->ReceiveShutdown)
+        PhAppendStringBuilder2(&stringBuilder, L"Receive shutdown, ");
+    if (SharedInfo->SendShutdown)
+        PhAppendStringBuilder2(&stringBuilder, L"Send shutdown, ");
+    if (SharedInfo->ConditionalAccept)
+        PhAppendStringBuilder2(&stringBuilder, L"Conditional accept, ");
+    if (SharedInfo->IsSANSocket)
+        PhAppendStringBuilder2(&stringBuilder, L"SAN, ");
+    if (SharedInfo->fIsTLI)
+        PhAppendStringBuilder2(&stringBuilder, L"TLI, ");
+    if (SharedInfo->Rio)
+        PhAppendStringBuilder2(&stringBuilder, L"RIO, ");
+    if (SharedInfo->ReceiveBufferSizeSet)
+        PhAppendStringBuilder2(&stringBuilder, L"Receive buffer size set, ");
+    if (SharedInfo->SendBufferSizeSet)
+        PhAppendStringBuilder2(&stringBuilder, L"Send buffer size set, ");
+
+    if (!SharedInfo->Flags)
+    {
+        PhAppendStringBuilder2(&stringBuilder, L"none");
+    }
+    else
+    {
+        // Remove the trailing comma
+        PhRemoveEndStringBuilder(&stringBuilder, 2);
+    }
+
+    PhAppendCharStringBuilder(&stringBuilder, L')');
+    return PhFinalStringBuilderString(&stringBuilder);
+}
+
+/**
+  * \brief Looks up a name of a known address family.
+  *
+  * \param[in] AddressFamily The address family value.
+  *
+  * \return A string with the address family name or NULL when it is not recognized.
+  */
+_Maybenull_
+PCWSTR
+NTAPI
+PhpAfdGetAddressFamilyString(
+    _In_ LONG AddressFamily
+    )
+{
+    switch (AddressFamily)
+    {
+    case AF_UNSPEC:
+        return L"Unspecified";
+    case AF_INET:
+        return L"Internet";
+    case AF_INET6:
+        return L"Internet v6";
+    case AF_BTH:
+        return L"Bluetooth";
+    case AF_HYPERV:
+        return L"Hyper-V";
+    default:
+        return NULL;
+    }
+}
+
+/**
+  * \brief Formats an address family as a string.
+  *
+  * \param[in] AddressFamily The address family value.
+  *
+  * \return A string with the address family name.
+  */
+PPH_STRING
+NTAPI
+PhAfdFormatAddressFamily(
+    _In_ LONG AddressFamily
+    )
+{
+    PCWSTR knownName = PhpAfdGetAddressFamilyString(AddressFamily);
+
+    if (knownName)
+        return PhCreateString(knownName);
+    else
+        return PhFormatString(L"Unrecognized address family %d", AddressFamily);
+}
+
+/**
+  * \brief Looks up a name for a known protocol.
   *
   * \param[in] AddressFamily The address family of the protocol.
   * \param[in] Protocol The protocol value.
   *
-  * \return A string with the protocol name.
+  * \return A string with the protocol name or NULL when it is not recognized.
   */
+_Maybenull_
 PCWSTR
 NTAPI
-PhAfdGetProtocolName(
+PhpAfdGetProtocolString(
     _In_ LONG AddressFamily,
     _In_ LONG Protocol
-)
+    )
 {
-	switch (AddressFamily)
-	{
-		case AF_INET:
-			switch (Protocol)
-			{
-                case IPPROTO_ICMP:
-                    return L"ICMP";
-				case IPPROTO_TCP:
-					return L"TCP";
-				case IPPROTO_UDP:
-					return L"UDP";
-                case IPPROTO_RDP:
-                    return L"RDP";
-                case IPPROTO_SCTP:
-                    return L"SCTP";
-                case IPPROTO_RESERVED_IPSEC:
-                    return L"IPSec";
-                case IPPROTO_RAW:
-                    return L"RAW/IPv4";
-			}
-		case AF_INET6:
-			switch (Protocol)
-			{
-                case IPPROTO_ICMPV6:
-                    return L"ICMP6";
-                case IPPROTO_TCP:
-					return L"TCP6";
-				case IPPROTO_UDP:
-					return L"UDP6";
-                case IPPROTO_RDP:
-                    return L"RDP6";
-                case IPPROTO_SCTP:
-                    return L"SCTP6";
-                case IPPROTO_RESERVED_IPSEC:
-                    return L"IPSec6";
-                case IPPROTO_RAW:
-                    return L"RAW/IPv6";
-            }
-		case AF_BTH:
-			switch (Protocol)
-			{
-				case BTHPROTO_RFCOMM:
-					return L"RFCOMM [Bluetooth]";
-				case BTHPROTO_L2CAP:
-					return L"L2CAP [Bluetooth]";
-			}
-		case AF_HYPERV:
-			switch (Protocol) 
-			{
-				case HV_PROTOCOL_RAW:
-					return L"Hyper-V RAW";
-			}
-	}
+    switch (AddressFamily)
+    {
+    case AF_INET:
+    case AF_INET6:
+        switch (Protocol)
+        {
+        case IPPROTO_ICMP:
+            return L"ICMP";
+        case IPPROTO_IGMP:
+            return L"IGMP";
+        case IPPROTO_TCP:
+            return L"TCP";
+        case IPPROTO_UDP:
+            return L"UDP";
+        case IPPROTO_RDP:
+            return L"RDP";
+        case IPPROTO_ICMPV6:
+            return L"ICMPv6";
+        case IPPROTO_PGM:
+            return L"PGM";
+        case IPPROTO_L2TP:
+            return L"L2TP";
+        case IPPROTO_SCTP:
+            return L"SCTP";
+        case IPPROTO_RAW:
+            return L"RAW";
+        case IPPROTO_RESERVED_IPSEC:
+            return L"IPSec";
+        }
+    case AF_BTH:
+        switch (Protocol)
+        {
+        case BTHPROTO_RFCOMM:
+            return L"RFCOMM";
+        case BTHPROTO_L2CAP:
+            return L"L2CAP";
+        }
+    case AF_HYPERV:
+        switch (Protocol)
+        {
+        case HV_PROTOCOL_RAW:
+            return L"RAW";
+        }
+    }
 
-	return L"unrecognized protocol";
+    return NULL;
+}
+
+/**
+  * \brief Formats a protocol name as a string.
+  *
+  * \param[in] AddressFamily The address family of the protocol.
+  * \param[in] Protocol The protocol value.
+  *
+  * \return A string with a human-readable protocol name.
+  */
+PPH_STRING
+NTAPI
+PhAfdFormatProtocol(
+    _In_ LONG AddressFamily,
+    _In_ LONG Protocol
+    )
+{
+    PCWSTR knownName = PhpAfdGetProtocolString(AddressFamily, Protocol);
+
+    if (knownName)
+        return PhCreateString(knownName);
+    else
+        return PhFormatString(L"Unrecognized protocol %d", Protocol);
+}
+
+/**
+  * \brief Looks up a short human-readable identifier for a known protocol.
+  *
+  * \param[in] AddressFamily The address family of the protocol.
+  * \param[in] Protocol The protocol value.
+  *
+  * \return A string with the protocol name or NULL when it is not recognized.
+  */
+_Maybenull_
+PCWSTR
+NTAPI
+PhpAfdGetProtocolSummary(
+    _In_ LONG AddressFamily,
+    _In_ LONG Protocol
+    )
+{
+    switch (AddressFamily)
+    {
+    case AF_INET:
+        switch (Protocol)
+        {
+        case IPPROTO_ICMP:
+            return L"ICMP";
+        case IPPROTO_TCP:
+            return L"TCP";
+        case IPPROTO_UDP:
+            return L"UDP";
+        case IPPROTO_RAW:
+            return L"RAW/IPv4";
+        }
+    case AF_INET6:
+        switch (Protocol)
+        {
+        case IPPROTO_ICMPV6:
+            return L"ICMP6";
+        case IPPROTO_TCP:
+            return L"TCP6";
+        case IPPROTO_UDP:
+            return L"UDP6";
+        case IPPROTO_RAW:
+            return L"RAW/IPv6";
+        }
+    case AF_BTH:
+        switch (Protocol)
+        {
+        case BTHPROTO_RFCOMM:
+            return L"RFCOMM [Bluetooth]";
+        case BTHPROTO_L2CAP:
+            return L"L2CAP [Bluetooth]";
+        }
+    case AF_HYPERV:
+        switch (Protocol) 
+        {
+        case HV_PROTOCOL_RAW:
+            return L"Hyper-V RAW";
+        }
+    }
+
+    return NULL;
 }
 
 /**
@@ -554,7 +956,7 @@ PhAfdGetProtocolName(
 _Maybenull_
 PPH_STRING
 NTAPI
-PhAfdFormatSocketName(
+PhAfdFormatSocketBestName(
     _In_ HANDLE SocketHandle
     )
 {
@@ -576,32 +978,21 @@ PhAfdFormatSocketName(
 
     if (sharedInfoAvailable)
     {
-        // Socket state
-        switch (sharedInfo.State)
+        PCWSTR detail;
+
+        // State
+        if (detail = PhpAfdGetSocketStateString(sharedInfo.State))
         {
-            case SocketStateInitializing:
-                PhAppendStringBuilder2(&stringBuilder, L"initializing ");
-                break;
-            case SocketStateOpen:
-                PhAppendStringBuilder2(&stringBuilder, L"open ");
-                break;
-            case SocketStateBound:
-                PhAppendStringBuilder2(&stringBuilder, L"bound ");
-                break;
-            case SocketStateBoundSpecific:
-                PhAppendStringBuilder2(&stringBuilder, L"bound (specific) ");
-                break;
-            case SocketStateConnected:
-                PhAppendStringBuilder2(&stringBuilder, L"connected ");
-                break;
-            case SocketStateClosing:
-                PhAppendStringBuilder2(&stringBuilder, L"closing ");
-                break;
+            PhAppendStringBuilder2(&stringBuilder, detail);
+            PhAppendStringBuilder2(&stringBuilder, L" ");
         }
 
-        // Socket protocol
-        PhAppendStringBuilder2(&stringBuilder, PhAfdGetProtocolName(sharedInfo.AddressFamily, sharedInfo.Protocol));
-        PhAppendStringBuilder2(&stringBuilder, L" ");
+        // Protocol
+        if (detail = PhpAfdGetProtocolSummary(sharedInfo.AddressFamily, sharedInfo.Protocol))
+        {
+            PhAppendStringBuilder2(&stringBuilder, detail);
+            PhAppendStringBuilder2(&stringBuilder, L" ");
+        }
     }
 
     if (addressAvailable)

@@ -20,14 +20,14 @@ EXTERN_C_START
 PHLIBAPI
 BOOLEAN
 NTAPI
-PhIsAfdSocketName(
-    _In_ PPH_STRING ObjectName
+PhAfdIsSocketObjectName(
+    _In_opt_ PPH_STRING ObjectName
     );
 
 PHLIBAPI
 NTSTATUS
 NTAPI
-PhIsAfdSocketHandle(
+PhAfdIsSocketHandle(
     _In_ HANDLE Handle
     );
 
@@ -61,6 +61,22 @@ PhAfdQuerySimpleInfo(
     _Out_ PAFD_INFORMATION Information
     );
 
+NTSTATUS
+NTAPI
+PhAfdQueryTdiHandle(
+    _In_ HANDLE SocketHandle,
+    _In_ ULONG QueryMode,
+    _Out_ PHANDLE TdiHandle
+    );
+
+NTSTATUS
+NTAPI
+PhAfdQueryFormatTdiDeviceName(
+    _In_ HANDLE SocketHandle,
+    _In_ ULONG QueryMode,
+    _Outptr_ PPH_STRING* TdiDeviceName
+    );
+
 PHLIBAPI
 NTSTATUS
 NTAPI
@@ -78,10 +94,41 @@ PhAfdQueryFormatAddress(
     _Out_ PPH_STRING *AddressString
     );
 
+PPH_STRING
+NTAPI
+PhAfdFormatSocketState(
+    _In_ SOCKET_STATE SocketState
+    );
+
+PPH_STRING
+NTAPI
+PhAfdFormatSocketType(
+    _In_ LONG SocketType
+    );
+
+PPH_STRING
+NTAPI
+PhAfdFormatAddressFamily(
+    _In_ LONG AddressFamily
+    );
+
+PPH_STRING
+NTAPI
+PhAfdFormatProtocol(
+    _In_ LONG AddressFamily,
+    _In_ LONG Protocol
+    );
+
+PPH_STRING
+NTAPI
+PhAfdFormatSharedInfoFlags(
+    _In_ PSOCK_SHARED_INFO SharedInfo
+    );
+
 _Maybenull_
 PPH_STRING
 NTAPI
-PhAfdFormatSocketName(
+PhAfdFormatSocketBestName(
     _In_ HANDLE SocketHandle
     );
 
