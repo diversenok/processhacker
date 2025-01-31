@@ -97,6 +97,7 @@ typedef enum _PHP_HANDLE_GENERAL_INDEX
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETTYPE,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETADDRESSFAMILY,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROTOCOL,
+    PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROVIDERID,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETSENDTIMEOUT,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETRECEIVETIMEOUT,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETSENDBUFFERSIZE,
@@ -495,6 +496,7 @@ VOID PhpUpdateHandleGeneralListViewGroups(
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETTYPE, L"Type");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETADDRESSFAMILY, L"Address family");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROTOCOL, L"Protocol");
+            PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROVIDERID, L"Provider ID");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETSENDTIMEOUT, L"Send timeout");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETRECEIVETIMEOUT, L"Receive timeout");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETSENDBUFFERSIZE, L"Send buffer size");
@@ -1535,6 +1537,11 @@ VOID PhpUpdateHandleGeneral(
                         // Protocol
                         itemString = PhAfdFormatProtocol(socketInfo.AddressFamily, socketInfo.Protocol);
                         PhSetHandleListViewItem(Context, PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROTOCOL, 1, itemString->Buffer);
+                        PhDereferenceObject(itemString);
+
+                        // Provider ID
+                        itemString = PhFormatGuid(&socketInfo.ProviderId);
+                        PhSetHandleListViewItem(Context, PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROVIDERID, 1, itemString->Buffer);
                         PhDereferenceObject(itemString);
 
                         // Send timeout
