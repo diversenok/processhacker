@@ -126,7 +126,7 @@ typedef struct _AFD_OPEN_PACKET_FULL_EA
 #define AFD_GET_QOS                     38 // out: AFD_QOS_INFO
 #define AFD_NO_OPERATION                39 // in (opt): IO_STATUS_BLOCK
 #define AFD_VALIDATE_GROUP              40 // in: AFD_VALIDATE_GROUP_INFO
-#define AFD_GET_UNACCEPTED_CONNECT_DATA 41 // in: AFD_UNACCEPTED_CONNECT_DATA_INFO; out: AFD_UNACCEPTED_CONNECT_DATA_INFO (when LengthOnly is set) or recevied data
+#define AFD_GET_UNACCEPTED_CONNECT_DATA 41 // in: AFD_UNACCEPTED_CONNECT_DATA_INFO; out: AFD_UNACCEPTED_CONNECT_DATA_INFO (when LengthOnly is set) or received data
 #define AFD_ROUTING_INTERFACE_QUERY     42 // in: TRANSPORT_ADDRESS; out: SOCKADDR
 #define AFD_ROUTING_INTERFACE_CHANGE    43 // in: AFD_TRANSPORT_IOCTL_INFO
 #define AFD_ADDRESS_LIST_QUERY          44 // in: USHORT (TDI_ADDRESS_TYPE_*/AF_*); out: TRANSPORT_ADDRESS
@@ -567,10 +567,10 @@ typedef struct _SOCK_SHARED_INFO
         };
         WORD Flags;
     };
-    ULONG CreationFlags;
+    ULONG CreationFlags; // WSA_FLAG_*
     ULONG CatalogEntryId;
-    ULONG ServiceFlags1;
-    ULONG ProviderFlags;
+    ULONG ServiceFlags1; // XP1_*
+    ULONG ProviderFlags; // PFL_*
     GROUP GroupID;
     AFD_GROUP_TYPE GroupType;
     LONG GroupPriority;
