@@ -121,6 +121,24 @@ PhAfdFormatProtocol(
 
 PPH_STRING
 NTAPI
+PhAfdFormatProviderFlags(
+    _In_ ULONG ProviderFlags
+    );
+
+PPH_STRING
+NTAPI
+PhAfdFormatServiceFlags(
+    _In_ ULONG ServiceFlags
+    );
+
+PPH_STRING
+NTAPI
+PhAfdFormatCreationFlags(
+    _In_ ULONG CreationFlags
+    );
+
+PPH_STRING
+NTAPI
 PhAfdFormatSharedInfoFlags(
     _In_ PSOCK_SHARED_INFO SharedInfo
     );
