@@ -97,11 +97,15 @@ typedef enum _PHP_HANDLE_GENERAL_INDEX
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETTYPE,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETADDRESSFAMILY,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROTOCOL,
+    PH_HANDLE_GENERAL_INDEX_AFDSOCKETCATALOGENTRYID,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROVIDERID,
+    PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROVIDERFLAGS,
+    PH_HANDLE_GENERAL_INDEX_AFDSOCKETSERVICEFLAGS,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETSENDTIMEOUT,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETRECEIVETIMEOUT,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETSENDBUFFERSIZE,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETRECEIVEBUFFERSIZE,
+    PH_HANDLE_GENERAL_INDEX_AFDSOCKETCREATIONFLAGS,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETFLAGS,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETCONNECTTIME,
     PH_HANDLE_GENERAL_INDEX_AFDSOCKETADDRESS,
@@ -496,11 +500,15 @@ VOID PhpUpdateHandleGeneralListViewGroups(
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETTYPE, L"Type");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETADDRESSFAMILY, L"Address family");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROTOCOL, L"Protocol");
+            PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETCATALOGENTRYID, L"Catalog entry ID");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROVIDERID, L"Provider ID");
+            PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROVIDERFLAGS, L"Provider flags");
+            PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETSERVICEFLAGS, L"Service flags");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETSENDTIMEOUT, L"Send timeout");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETRECEIVETIMEOUT, L"Receive timeout");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETSENDBUFFERSIZE, L"Send buffer size");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETRECEIVEBUFFERSIZE, L"Receive buffer size");
+            PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETCREATIONFLAGS, L"Creation flags");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETFLAGS, L"Flags");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETCONNECTTIME, L"Connect time");
             PhAddHandleListViewItem(Context->ListViewClass, PH_HANDLE_GENERAL_CATEGORY_AFDSOCKET, PH_HANDLE_GENERAL_INDEX_AFDSOCKETADDRESS, L"Address");
@@ -1539,9 +1547,24 @@ VOID PhpUpdateHandleGeneral(
                         PhSetHandleListViewItem(Context, PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROTOCOL, 1, itemString->Buffer);
                         PhDereferenceObject(itemString);
 
+                        // Catalog entry ID
+                        itemString = PhFormatString(L"%d", socketInfo.CatalogEntryId);
+                        PhSetHandleListViewItem(Context, PH_HANDLE_GENERAL_INDEX_AFDSOCKETCATALOGENTRYID, 1, itemString->Buffer);
+                        PhDereferenceObject(itemString);
+
                         // Provider ID
                         itemString = PhFormatGuid(&socketInfo.ProviderId);
                         PhSetHandleListViewItem(Context, PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROVIDERID, 1, itemString->Buffer);
+                        PhDereferenceObject(itemString);
+
+                        // Provider flags
+                        itemString = PhAfdFormatProviderFlags(socketInfo.ProviderFlags);
+                        PhSetHandleListViewItem(Context, PH_HANDLE_GENERAL_INDEX_AFDSOCKETPROVIDERFLAGS, 1, itemString->Buffer);
+                        PhDereferenceObject(itemString);
+
+                        // Service flags
+                        itemString = PhAfdFormatServiceFlags(socketInfo.ServiceFlags1);
+                        PhSetHandleListViewItem(Context, PH_HANDLE_GENERAL_INDEX_AFDSOCKETSERVICEFLAGS, 1, itemString->Buffer);
                         PhDereferenceObject(itemString);
 
                         // Send timeout
@@ -1556,7 +1579,7 @@ VOID PhpUpdateHandleGeneral(
                             PhSetHandleListViewItem(Context, PH_HANDLE_GENERAL_INDEX_AFDSOCKETSENDTIMEOUT, 1, L"Unlimited");
                         }
 
-                        // Receieve timeout
+                        // Receive timeout
                         if (socketInfo.ReceiveTimeout)
                         {
                             itemString = PhFormatTimeSpanRelative(PH_TICKS_PER_MS * socketInfo.ReceiveTimeout);
@@ -1576,6 +1599,11 @@ VOID PhpUpdateHandleGeneral(
                         // Receive buffer size
                         itemString = PhFormatSize(socketInfo.ReceiveBufferSize, -1);
                         PhSetHandleListViewItem(Context, PH_HANDLE_GENERAL_INDEX_AFDSOCKETRECEIVEBUFFERSIZE, 1, itemString->Buffer);
+                        PhDereferenceObject(itemString);
+
+                        // Creation flags
+                        itemString = PhAfdFormatCreationFlags(socketInfo.CreationFlags);
+                        PhSetHandleListViewItem(Context, PH_HANDLE_GENERAL_INDEX_AFDSOCKETCREATIONFLAGS, 1, itemString->Buffer);
                         PhDereferenceObject(itemString);
 
                         // Flags
