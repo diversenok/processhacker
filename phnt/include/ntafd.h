@@ -676,11 +676,20 @@ typedef struct _AFD_TRANSPORT_IOCTL_INFO
 } AFD_TRANSPORT_IOCTL_INFO, *PAFD_TRANSPORT_IOCTL_INFO;
 
 // private
+typedef enum TL_IO_CONTROL_TYPE
+{
+    TlEndpointIoControlType = 0,
+    TlSetSockOptIoControlType = 1,
+    TlGetSockOptIoControlType = 2,
+    TlSocketIoControlType = 3,
+} TL_IO_CONTROL_TYPE, *PTL_IO_CONTROL_TYPE;
+
+// private
 typedef struct _AFD_TL_IO_CONTROL_INFO
 {
-    ULONG Type;
-    ULONG Level; // SOL_* and others
-    ULONG IoControlCode; // SO_* and others
+    TL_IO_CONTROL_TYPE Type;
+    ULONG Level; // SOL_* or IPPROTO_*
+    ULONG IoControlCode; // SIO_*, SO_*, IP_*, IPV6_*, TCP_*, UDP_*, etc. (depending on type and level)
     BOOLEAN EndpointIoctl;
     _Field_size_bytes_(InputBufferLength) PVOID InputBuffer;
     SIZE_T InputBufferLength;
