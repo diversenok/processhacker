@@ -74,6 +74,13 @@ typedef struct _AFD_OPEN_PACKET_FULL_EA
     AFD_OPEN_PACKET OpenPacket;
 } AFD_OPEN_PACKET_FULL_EA, *PAFD_OPEN_PACKET_FULL_EA;
 
+// private
+typedef struct _AFD_SWITCH_OPEN_PACKET
+{
+    HANDLE CompletionPort;
+    HANDLE CompletionEvent;
+} AFD_SWITCH_OPEN_PACKET, *PAFD_SWITCH_OPEN_PACKET;
+
 //
 // Since Vista, sockets can use different modes of transport: TLI, TDI, and hybrid. The mode is selected
 // based on whether the caller specifies the transport device at socket creation and whether this device
